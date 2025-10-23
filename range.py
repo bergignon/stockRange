@@ -3,6 +3,8 @@ import os
 import time
 import scipy
 from datetime import datetime
+import math
+
 
 def is_valid_date_format(date_string):
     try:
@@ -25,19 +27,30 @@ def is_valid_date_format(date_string):
 
 # # Get date of range
 
-# while True:
-#     date = input("Enter the date of desired IV expectation (YYYY-MM-DD) : ")
-#     if is_valid_date_format(date):
-#         break
-#     else:
-#         print("Enter a valid date\r")
-#         time.sleep(0.5)
-#         os.system('clear')
-ticker = "AAPL"
-date = "2025-10-31"
-data = yf.Ticker(ticker)
+date_str = "2025-10-31"
+today = datetime.today()
+exp_date = datetime.strptime(date_str, "%Y-%m-%d")
+time_to_expiration = (exp_date - today).days / 365
 
+
+ticker = "AAPL"
+data = yf.Ticker(ticker)
+interest_rate = 0.04
+
+price = data.info['regularMarketPrice']
 expiration_dates = data.options
-print(expiration_dates)
-option = data.option_chain(date)
-print(option)
+option = data.option_chain(date_str)
+call = option.calls.iloc[0]
+premium = call["lastPrice"]
+
+def CallPrice(S, sigma, K, T, r):
+    d1 = (math.log(S / K) + (r + .5 * sigma**2) * T) / (sigma * T**.5)
+    d2 = d1 - sigma * T**0.5
+    n1 = math.norm.cdf(d1)
+    n2 = math.norm.cdf(d2)
+    DF = math.exp(-r * T)
+    price=S * n1 - K * DF * n2
+    return price
+
+
+print(price, premium)
