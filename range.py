@@ -4,6 +4,7 @@ import time
 import scipy
 from datetime import datetime
 import math
+import numpy as np
 
 
 def is_valid_date_format(date_string):
@@ -43,14 +44,34 @@ option = data.option_chain(date_str)
 call = option.calls.iloc[0]
 premium = call["lastPrice"]
 
-def CallPrice(S, sigma, K, T, r):
-    d1 = (math.log(S / K) + (r + .5 * sigma**2) * T) / (sigma * T**.5)
-    d2 = d1 - sigma * T**0.5
+def call_price(asset, sigma, strike, expiry, interest):
+    d1 = (math.log(asset / strike) + 
+          (interest + .5 * sigma**2) * expiry) / (sigma * expiry**.5)
+    d2 = d1 - sigma * expiry**0.5
     n1 = math.norm.cdf(d1)
     n2 = math.norm.cdf(d2)
-    DF = math.exp(-r * T)
-    price=S * n1 - K * DF * n2
+    DF = math.exp(-interest * expiry)
+    price = asset * n1 - strike * DF * n2
     return price
 
+# Initial guess of volatility value
+def inflexion_point(asset, strike, expiry, r):
+    m = asset / (strike * math.exp(-r * expiry))
+    return math.sqrt(2 * np.abs(math.log(m)) / expiry)
+
+def vega(asset, sigma, strike, expiry, interest):
+    d1 = (math.log(asset / strike) + (interest + .5 * sigma**2) * expiry) / (sigma * expiry**.5)
+    vega = asset * expiry**0.5 * math.norm.pdf(d1)
+    return vega
+
+def volatility(premium, asset, strike, interest, expiry, tolerance):
+    guess = inflexion_point(asset, strike, expiry, interest)
+    call = call_price(asset, guess, strike, expiry, interest)
+    vega = vega(asset, guess, strike, expiry, interest)
+    while (abs((price - premium) / vega) > tolerance):
+        guess = guess - (call - premium) / vega
+        call = call_price(asset, guess, strike, expiry, interest)
+        vega = vega(asset, guess, strike, expiry, interest)
+    return guess
 
 print(price, premium)
