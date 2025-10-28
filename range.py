@@ -1,77 +1,61 @@
 import yfinance as yf
 import os
 import time
-import scipy
 from datetime import datetime
-import math
+from util import *
 import numpy as np
-
-
-def is_valid_date_format(date_string):
-    try:
-        if datetime.strptime(date_string, '%Y-%m-%d') < datetime.now():
-            return False
-        return True
-    except ValueError:
-        return False
 
 # Get ticker
 
-# while True:
-#     ticker = input("Enter the ticker of the stock : ")
-#     if any(not char.isupper() for char in ticker):
-#         print("Enter a valid ticker\r")
-#         time.sleep(0.5)
-#         os.system('clear')
-#     else:
-#         break
+while True:
+    ticker = input("Enter the ticker of the stock : ")
+    if any(not char.isupper() for char in ticker):
+        print("Enter a valid ticker\r")
+        time.sleep(0.5)
+        os.system('clear')
+    else:
+        break
 
-# # Get date of range
-
-date_str = "2025-10-31"
-today = datetime.today()
-exp_date = datetime.strptime(date_str, "%Y-%m-%d")
-time_to_expiration = (exp_date - today).days / 365
-
-
-ticker = "AAPL"
 data = yf.Ticker(ticker)
+
+print("Available days to forecast : ")
+for index, date in enumerate(data.options):
+    index += 1
+    print(f"Number #{index} : {date}  |   ", end='')
+
+date_choice = int(input("Select forecast day : "))
+date_choice = data.options[date_choice-1]
+
+# Param 1
+price = data.info['regularMarketPrice']
+
+option = data.option_chain(date_choice)
+print(len(option.calls))
+call = option.calls.iloc[int(len(option.calls) / 2)]
+
+# Param 2 3 & 4
+premium = call["lastPrice"]
+strike = call["strike"]
 interest_rate = 0.04
 
-price = data.info['regularMarketPrice']
-expiration_dates = data.options
-option = data.option_chain(date_str)
-call = option.calls.iloc[0]
-premium = call["lastPrice"]
+exp_date = datetime.strptime(date_choice, "%Y-%m-%d")
+today = datetime.today()
 
-def call_price(asset, sigma, strike, expiry, interest):
-    d1 = (math.log(asset / strike) + 
-          (interest + .5 * sigma**2) * expiry) / (sigma * expiry**.5)
-    d2 = d1 - sigma * expiry**0.5
-    n1 = math.norm.cdf(d1)
-    n2 = math.norm.cdf(d2)
-    DF = math.exp(-interest * expiry)
-    price = asset * n1 - strike * DF * n2
-    return price
+# Param 5
 
-# Initial guess of volatility value
-def inflexion_point(asset, strike, expiry, r):
-    m = asset / (strike * math.exp(-r * expiry))
-    return math.sqrt(2 * np.abs(math.log(m)) / expiry)
+time_to_expiration = (exp_date - today).days / 365
 
-def vega(asset, sigma, strike, expiry, interest):
-    d1 = (math.log(asset / strike) + (interest + .5 * sigma**2) * expiry) / (sigma * expiry**.5)
-    vega = asset * expiry**0.5 * math.norm.pdf(d1)
-    return vega
+IV = volatility(premium, price, strike, interest_rate, time_to_expiration, 10**-8)
+print(IV)
 
-def volatility(premium, asset, strike, interest, expiry, tolerance):
-    guess = inflexion_point(asset, strike, expiry, interest)
-    call = call_price(asset, guess, strike, expiry, interest)
-    vega = vega(asset, guess, strike, expiry, interest)
-    while (abs((price - premium) / vega) > tolerance):
-        guess = guess - (call - premium) / vega
-        call = call_price(asset, guess, strike, expiry, interest)
-        vega = vega(asset, guess, strike, expiry, interest)
-    return guess
+small_iv = IV * np.sqrt(time_to_expiration)
 
-print(price, premium)
+U = price * 2
+L = price * 1.5
+days = (exp_date - today).days
+
+z_upper = (np.log(U/price) + 0.5 * small_iv**2) / small_iv
+z_lower = (np.log(L/price) + 0.5 * small_iv**2) / small_iv
+
+prob = norm.cdf(z_upper) - norm.cdf(z_lower)
+print(f"Probability of stock ending between {L} and {U} in {days} days: {prob:.2%}")
